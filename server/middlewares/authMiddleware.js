@@ -44,8 +44,6 @@ export const isSeller = async (req, res, next) => {
     // Fetch the user from the database to ensure the latest role
     const user = await User.findById(decoded.userId);
 
-    console.log(user);
-
     if (!user) {
       return res.status(401).json({ message: 'User not found' });
     }

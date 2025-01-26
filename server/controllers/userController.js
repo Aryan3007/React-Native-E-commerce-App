@@ -1,5 +1,4 @@
-import User from '../models/User.js';
-
+import User from "../models/User.js";
 // Controller to create a store and update user role to seller
 import Store from "../models/Store.js";
 
@@ -9,7 +8,11 @@ export const createStore = async (req, res) => {
 
     // Validate required fields
     if (!shopName || !address || !category) {
-      return res.status(400).json({ message: "All fields are required: shopName, address, category." });
+      return res
+        .status(400)
+        .json({
+          message: "All fields are required: shopName, address, category.",
+        });
     }
 
     // Find the user by ID (from the authenticated user)
@@ -59,12 +62,16 @@ export const updateStore = async (req, res) => {
     const user = await User.findById(req.user.userId);
 
     if (!user) {
-      return res.status(404).json({ message: "User not found from updatestore." });
+      return res
+        .status(404)
+        .json({ message: "User not found from updatestore." });
     }
 
     // Ensure the user is a seller
     if (user.role !== "seller") {
-      return res.status(403).json({ message: "Only sellers can update store details." });
+      return res
+        .status(403)
+        .json({ message: "Only sellers can update store details." });
     }
 
     // Update the store details
@@ -77,6 +84,34 @@ export const updateStore = async (req, res) => {
     res.status(200).json({
       message: "Store updated successfully.",
       store: user.store,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+};
+
+
+
+
+export const getStoreProducts = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+
+    // Find the store by ID
+    const store = await Store.findById(storeId).populate("products");
+
+    if (!store) {
+      return res.status(404).json({ message: "Store not found." });
+    }
+
+    // Retrieve all products in the store
+    const products = store.products;
+
+    res.status(200).json({
+      message: "Products fetched successfully.",
+      storeName: store.shopName,
+      products,
     });
   } catch (error) {
     console.error(error);

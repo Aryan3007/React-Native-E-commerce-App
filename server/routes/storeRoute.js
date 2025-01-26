@@ -1,6 +1,6 @@
 import express from "express";
 import { isAuthenticated, isSeller } from "../middlewares/authMiddleware.js";
-import { createStore, updateStore } from "../controllers/userController.js";
+import { createStore, getStoreProducts, updateStore } from "../controllers/userController.js";
 
 
 const storeRouter = express.Router();
@@ -9,5 +9,7 @@ const storeRouter = express.Router();
 storeRouter.post("/store", isAuthenticated, createStore);
 // Route to update store details
 storeRouter.put("/store", isAuthenticated, updateStore);
+storeRouter.get("/store/:storeId/products", isAuthenticated, getStoreProducts);
+
 
 export default storeRouter;

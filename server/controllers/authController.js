@@ -94,28 +94,70 @@ export const loginUser = async (req, res) => {
     }
 };
 
-
-
-// Controller to get user by ID
-export const getUserById = async (req, res) => {
-    const { id } = req.params;  // Get the user ID from the URL parameter
-
+// Controller to get authenticated user details
+export const getUserByToken = async (req, res) => {
     try {
-        // Find the user by ID in the database
-        const user = await User.findById(id);
-
-        // If no user is found
-        if (!user) {
-            return res.status(404).json({ message: "User not found." });
-        }
-
-        // If user is found, return the user data
-        res.status(200).json({
-            message: "User fetched successfully.",
-            user,
-        });
+      // `req.user` is already populated by the middleware
+    const user = await User.findById(req.user.userId);
+  
+      // If no user is found (this should not happen since middleware checks it)
+      if (!user) {
+        return res.status(404).json({ message: "User not found." });
+      }
+  
+      // Respond with user data (exclude sensitive fields like password)
+      res.status(200).json({
+        message: "User fetched successfully.",
+        user
+      });
     } catch (error) {
-        console.error("Error fetching user:", error);
-        res.status(500).json({ message: "Internal server error" });
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
+  };
+  
+  
+
+
+export const updateUserAddress = async (req, res) => {
+  const { userId } = req.params; // Extract userId from params
+  const { label, address } = req.body; // Extract address data from request body
+
+  if (!label || !address) {
+    return res.status(400).json({ message: "Label and address are required" });
+  }
+
+  try {
+    // Find the user by ID
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if the label already exists
+    const existingAddressIndex = user.addresses.findIndex(
+      (addr) => addr.label.toLowerCase() === label.toLowerCase()
+    );
+
+    if (existingAddressIndex !== -1) {
+      // If label exists, update the address
+      user.addresses[existingAddressIndex].address = address;
+    } else {
+      // If label doesn't exist, add a new address
+      user.addresses.push({ label, address });
+    }
+
+    // Save the updated user
+    await user.save();
+
+    res.status(200).json({
+      message: "Address updated successfully",
+      addresses: user.addresses,
+      name: user.name, // Include user's name in the response
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error updating address", error });
+  }
 };
