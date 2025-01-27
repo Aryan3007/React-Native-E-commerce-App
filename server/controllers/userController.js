@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 // Controller to create a store and update user role to seller
 import Store from "../models/Store.js";
+import Product from "../models/Product.js";
 
 export const createStore = async (req, res) => {
   try {
@@ -98,7 +99,7 @@ export const getStoreProducts = async (req, res) => {
   try {
     const { storeId } = req.params;
 
-    // Find the store by ID
+    // Find the store by ID and populate its products
     const store = await Store.findById(storeId).populate("products");
 
     if (!store) {
@@ -106,11 +107,22 @@ export const getStoreProducts = async (req, res) => {
     }
 
     // Retrieve all products in the store
-    const products = store.products;
+    const products = await Product.find({ store: storeId });
+
+    if (!products || products.length === 0) {
+      return res.status(404).json({ message: "No products found for this store." });
+    }
+
 
     res.status(200).json({
-      message: "Products fetched successfully.",
-      storeName: store.shopName,
+      message: "Store and products fetched successfully.",
+      store: {
+        storeName: store.shopName,
+        storeDescription: store.description,
+        storeLocation: store.location,
+        storeContact: store.contact,
+        // Include other store details as needed
+      },
       products,
     });
   } catch (error) {

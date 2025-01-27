@@ -1,5 +1,8 @@
+import { Category, Subcategory } from "../models/Category.js";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
+import Variation from "../models/Variation.js";
+
 
 export const addProduct = async (req, res) => {
   try {
@@ -9,9 +12,9 @@ export const addProduct = async (req, res) => {
     const {
       name,
       description,
-      price,
-      stock,
+      baseprice,
       category,
+      subcategory, // Include subcategory
       features = [],
       variations = [],
     } = req.body;
@@ -23,17 +26,45 @@ export const addProduct = async (req, res) => {
       typeof variations === "string" ? JSON.parse(variations) : variations;
 
     // Validate required fields
-    if (!name || !description || !price || !stock || !category) {
-      return res.status(400).json({ message: "All fields are required." });
+    if (!name || !description || !category || !baseprice) {
+      return res.status(400).json({
+        message: "Name, description, baseprice, and category are required.",
+      });
     }
 
-    // Process uploaded files
+    // Extract user ID from the authenticated token
+    const userId = req.user.userId;
+
+    // Find the user in the database and ensure they have a store
+    const user = await User.findById(userId).populate("store");
+    if (!user || !user.store) {
+      return res.status(403).json({
+        message: "Store not found",
+      });
+    }
+
+    // Validate category and subcategory
+    const categoryDoc = await Category.findById(category);
+    if (!categoryDoc) {
+      return res.status(400).json({ message: "Category not found." });
+    }
+
+    const subcategoryDoc = subcategory
+      ? await Subcategory.findById(subcategory)
+      : null;
+
+    if (subcategory && !subcategoryDoc) {
+      return res.status(400).json({ message: "Subcategory not found." });
+    }
+
+    // Process uploaded files for main product images
     const mainImages = req.files?.productImages
       ? req.files.productImages.map(
           (file) => `/uploads/${file.filename.replace(/\\/g, "/")}`
         )
       : [];
 
+    // Map variation images based on the provided index
     const variationImagesMap = {};
     if (req.files?.variationImages) {
       req.files.variationImages.forEach((file) => {
@@ -50,48 +81,39 @@ export const addProduct = async (req, res) => {
       });
     }
 
-    // Assign images to variations
-    const processedVariations = parsedVariations.map((variation, index) => ({
-      ...variation,
-      images: variationImagesMap[index] || [],
-    }));
+    // Create variations in the database and collect their ObjectIds
+    const variationIds = [];
+    for (let index = 0; index < parsedVariations.length; index++) {
+      const variation = parsedVariations[index];
+      const newVariation = new Variation({
+        name: variation.name,
+        price: parseFloat(variation.price),
+        stock: parseInt(variation.stock, 10),
+        sku: `SKU-${name.replace(/\s+/g, "-").toUpperCase()}-${index + 1}-${Date.now()}`, // Generate unique SKU
+        images: variationImagesMap[index] || [],
+        attributes: variation.attributes || {}, // Ensure attributes are included
+        description: variation.description || '',
+        features: variation.features || [], // Include any features for the variation
+      });
 
-    // Extract user ID from the authenticated token
-    const userId = req.user.userId;
-
-    // Find the user in the database
-    const user = await User.findById(userId).populate("store");
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
+      const savedVariation = await newVariation.save();
+      variationIds.push(savedVariation._id);
     }
 
-    // Ensure the user has a store
-    const store = user.store;
-    if (!store) {
-      return res
-        .status(403)
-        .json({ message: "You must create a store before adding products." });
-    }
-
-    // Create a new product with optional variations and features
+    // Create the product
     const newProduct = new Product({
       name,
       description,
-      price: parseFloat(price),
-      stock: parseInt(stock),
+      baseprice,
       category,
+      subcategory,
       images: mainImages,
-      store: store._id,
-      variations:
-        processedVariations.length > 0 ? processedVariations : undefined,
+      store: user.store._id,
+      variations: variationIds, // Store the ObjectId references of the variations
       features: parsedFeatures,
     });
 
     const savedProduct = await newProduct.save();
-
-    // Add the product to the store's product list
-    store.products.push(savedProduct._id);
-    await store.save();
 
     res.status(201).json({
       message: "Product added successfully.",
@@ -102,10 +124,10 @@ export const addProduct = async (req, res) => {
     res.status(500).json({
       message: "Error adding product.",
       error: error.message,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 };
+
 
 // Get all products with filtering, sorting, and pagination
 export const getAllProducts = async (req, res) => {
@@ -236,17 +258,24 @@ export const getProductsByCategory = async (req, res) => {
 export const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
-    const product = await Product.findById(id).populate("category"); // Populate the category field
+    
+    // Populate category, subcategory, variations, and store
+    const product = await Product.findById(id)
+      .populate("category") // Populate category field
+      .populate("subcategory") // Populate subcategory field
+      .populate("variations") // Populate variations field with full info
+      .populate("store"); // Populate store field with full info
 
     if (!product) {
       return res.status(404).json({ message: "Product not found." });
     }
 
-    res.status(200).json(product);
+    res.status(200).json(product); // Send the populated product details
   } catch (error) {
     res.status(500).json({ message: "Error fetching product details.", error });
   }
 };
+
 
 // Update a product
 export const updateProduct = async (req, res) => {
